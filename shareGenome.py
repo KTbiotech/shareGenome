@@ -113,6 +113,7 @@ def main():
 	parser = argparse.ArgumentParser(description='')
 	parser.add_argument('-l', '--list-files', dest="listFiles", help='')
 	parser.add_argument('-k', '--kmer-size', dest="kmerSize", default=31, help='')
+	parser.add_argument('--method-B', dest="method", default="none-share", help='')
 	parser.add_argument('-g', dest="nucmerG", default=10, help='')
 	parser.add_argument('-b', dest="nucmerB", default=10, help='')
 	parser.add_argument('-c', dest="nucmerC", default=10, help='')
@@ -131,6 +132,7 @@ def main():
 	nucmerC = args.nucmerC
 	nucmerIdy = args.nucmerIdy
 	overlap = args.overlap
+	method = args.method
 
 	### TOOLS
 
@@ -142,6 +144,7 @@ def main():
 	prefix = "tmp"
 	DICT = {}
 	#### copy file to tmp files  in oder to process
+	maxGenomeSize = 0
 	with open (listFiles, "r") as f:
 		i = 0
 		for l in f:
@@ -149,22 +152,35 @@ def main():
 			if len(l) > 1: ##  ignore empty lines
 				tmp = "{}{}_{}.fna".format(workDir, prefix, i)
 				copyfile(l, tmp)
-				DICT[tmp] = ""
+				genomeSize = getGenomeSize(tmp)
+				if genomeSize >= maxGenomeSize:
+					maxGenomeSize = genomeSize
+					largestGenome = tmp
+				DICT[tmp] = genomeSize
 				i +=1
 	####<<
 
 
 	files = list(DICT.keys())
+	genomeA = "genomeA.fasta"
+	genomeB = "genomeB.fasta"
+	with open (genomeA, "w") as f1, open (genomeB, "w") as f2:
+		
+		for file in DICT:
+			if file == largestGenome:
+				copyfile(file, genomeA)
+				continue
+			with open(file, "r") as f:
+				for l in f:
+					l = l.strip()
+					print (l, file=f2)
 
-	genomeA = files[0]
-	genomeB = files[1]
+
+			
 
 	#### align 2 genomes
-	runCMD([nucmer,"--maxmatch", "-l", kmerSize, "-g", nucmerG, "-b", nucmerB, "-c", nucmerC, "-p", "nucmer_{}".format(prefix),genomeA, genomeB],
-			runcmd = False
-
-			)	
-	runCMD([show_coords, "nucmer_{}.delta".format(prefix), "> nucmer_{}.coords".format(prefix)], runcmd=False)
+	runCMD([nucmer,"--maxmatch", "-l", kmerSize, "-g", nucmerG, "-b", nucmerB, "-c", nucmerC, "-p", "nucmer_{}".format(prefix),genomeA, genomeB])	
+	runCMD([show_coords, "nucmer_{}.delta".format(prefix), "> nucmer_{}.coords".format(prefix)])
 	####<<
 
 
@@ -229,9 +245,8 @@ def main():
 			shareSortById[sharedId].append((start, end))
 
 
-	noneShareBFile = open("genomeB_none_share.fasta", "w")
+	noneShareBFile = open("genomeB_{}.fasta".format(method), "w")
 	for seqId, pos in shareSortById.items():
-		method = "none-share"
 		result, posCoor = extractSeq(chromB[seqId], pos, method=method)
 		for i in range(len(posCoor)):
 			header = "{}__{} @length={}@start={}@end={}@method={}".format(seqId,i,(posCoor[i][1]-posCoor[i][0]),posCoor[i][0],posCoor[i][1], method)
